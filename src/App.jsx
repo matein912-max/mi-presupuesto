@@ -1,4 +1,23 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+// 1. IMPORTAMOS LAS HERRAMIENTAS DE FIREBASE
+import { initializeApp } from "firebase/app";
+import { getDatabase, ref, set, onValue } from "firebase/database";
+
+// 2. TUS CREDENCIALES (DE LA FOTO QUE ME PASASTE)
+const firebaseConfig = {
+  apiKey: "AIzaSyC9voyk8cV05JeRdKKyCZ0csTuKM9TY0rU",
+  authDomain: "mi-presupuesto-2d275.firebaseapp.com",
+  databaseURL: "https://mi-presupuesto-2d275-default-rtdb.firebaseio.com",
+  projectId: "mi-presupuesto-2d275",
+  storageBucket: "mi-presupuesto-2d275.firebasestorage.app",
+  messagingSenderId: "127612527439",
+  appId: "1:127612527439:web:5342901f09448d31a51b3a",
+  measurementId: "G-51DBGVFW65"
+};
+
+// Inicializamos la conexión
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getDatabase(firebaseApp);
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const CATEGORIAS = ["Necesidad","Deseo","Ahorro"];
@@ -12,7 +31,8 @@ const CAT_COLORS = {
 const fmt = (n) => new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",maximumFractionDigits:0}).format(n??0);
 const now = new Date();
 const AÑO = now.getFullYear();
-const STORAGE_KEY = `presupuesto_${AÑO}`;
+
+// Ya no usamos STORAGE_KEY porque usamos la nube
 
 function useSheetJS() {
   const [ready, setReady] = useState(typeof window!=="undefined"&&!!window.XLSX);
@@ -67,7 +87,7 @@ function MiniBar({value,max,color}){
 function SaveBadge({saved}){
   return(
     <div style={{position:"fixed",bottom:20,right:20,zIndex:100,background:saved?"#1a3a2a":"#2a2010",color:saved?"#5ab882":"#d4a843",padding:"8px 14px",borderRadius:20,fontSize:12,boxShadow:"0 2px 12px #00000040",transition:"all .3s",display:"flex",alignItems:"center",gap:6}}>
-      <span>{saved?"💾":"⏳"}</span>{saved?"Guardado":"Guardando..."}
+      <span>{saved?"☁️":"⏳"}</span>{saved?"Sincronizado":"Sincronizando..."}
     </div>
   );
 }
@@ -80,7 +100,7 @@ function VistaMes({mesIdx,datos,onChange}){
   const [editandoNota,setEditandoNota]=useState(false);
   const [notaTemp,setNotaTemp]=useState(datos.notas||"");
 
-  useEffect(()=>{setIngreso(datos.ingreso?String(datos.ingreso):"");setNotaTemp(datos.notas||"");setEditandoNota(false);},[mesIdx]);
+  useEffect(()=>{setIngreso(datos.ingreso?String(datos.ingreso):"");setNotaTemp(datos.notas||"");setEditandoNota(false);},[mesIdx, datos.ingreso, datos.notas]);
 
   const ingresoNum=datos.ingreso||0;
   const presupuesto={Necesidad:ingresoNum*.5,Deseo:ingresoNum*.3,Ahorro:ingresoNum*.2};
@@ -94,14 +114,13 @@ function VistaMes({mesIdx,datos,onChange}){
     onChange({...datos,egresos:[...(datos.egresos||[]),{id:Date.now(),nombre:nombre.trim(),monto:m,categoria:cat}]});
     setNombre("");setMonto("");
   };
-  const eliminar=(id)=>onChange({...datos,egresos:datos.egresos.filter(e=>e.id!==id)});
+  const eliminar=(id)=>onChange({...datos,egresos:(datos.egresos||[]).filter(e=>e.id!==id)});
   const totalGastado=(datos.egresos||[]).reduce((s,e)=>s+e.monto,0);
   const egresosPorCat=useMemo(()=>{const g={Necesidad:[],Deseo:[],Ahorro:[]};(datos.egresos||[]).forEach(e=>g[e.categoria].push(e));return g;},[datos.egresos]);
   const card=(s)=>({background:"#fff",borderRadius:14,border:"1px solid #e8e0d4",boxShadow:"0 2px 10px #0000000a",...s});
 
   return(
     <div>
-      {/* Ingreso */}
       <div style={card({padding:22,marginBottom:14})}>
         <div style={{fontSize:11,letterSpacing:3,textTransform:"uppercase",color:"#a09080",marginBottom:10}}>Ingreso de {MESES[mesIdx]}</div>
         <div style={{display:"flex",gap:10}}>
@@ -114,7 +133,6 @@ function VistaMes({mesIdx,datos,onChange}){
         </div>
       </div>
 
-      {/* Notas */}
       <div style={card({padding:20,marginBottom:14})}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <div style={{fontSize:11,letterSpacing:3,textTransform:"uppercase",color:"#a09080"}}>📝 Notas del mes</div>
@@ -122,7 +140,7 @@ function VistaMes({mesIdx,datos,onChange}){
         </div>
         {editandoNota?(
           <div>
-            <textarea value={notaTemp} onChange={e=>setNotaTemp(e.target.value)} placeholder="Anotá cualquier detalle: bonos, gastos extraordinarios, objetivos..." rows={3}
+            <textarea value={notaTemp} onChange={e=>setNotaTemp(e.target.value)} placeholder="Anotá cualquier detalle..." rows={3}
               style={{width:"100%",padding:"10px 13px",fontSize:14,border:"2px solid #d4a843",borderRadius:9,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"Georgia,serif",color:"#333",lineHeight:1.6}}/>
             <div style={{display:"flex",gap:8,marginTop:8}}>
               <button onClick={guardarNota} style={{flex:1,padding:9,background:"#1c1c28",color:"#d4a843",border:"none",borderRadius:8,cursor:"pointer",fontWeight:"bold",fontSize:13}}>Guardar</button>
@@ -138,7 +156,6 @@ function VistaMes({mesIdx,datos,onChange}){
 
       {ingresoNum>0&&(
         <>
-          {/* Cards */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
             {CATEGORIAS.map(c=>{
               const col=CAT_COLORS[c],gastado=gastoPorCat[c],lim=presupuesto[c],over=gastado>lim;
@@ -155,10 +172,9 @@ function VistaMes({mesIdx,datos,onChange}){
             })}
           </div>
 
-          {/* Agregar gasto */}
           <div style={card({padding:20,marginBottom:14})}>
             <div style={{fontSize:11,letterSpacing:3,textTransform:"uppercase",color:"#a09080",marginBottom:12}}>Nuevo gasto</div>
-            <input type="text" placeholder="Nombre (ej: Alquiler)" value={nombre} onChange={e=>setNombre(e.target.value)}
+            <input type="text" placeholder="Nombre" value={nombre} onChange={e=>setNombre(e.target.value)}
               style={{width:"100%",padding:"10px 13px",fontSize:14,border:"2px solid #e8e0d4",borderRadius:8,outline:"none",boxSizing:"border-box",marginBottom:10,fontFamily:"inherit"}}/>
             <div style={{display:"flex",gap:8,marginBottom:10}}>
               <div style={{position:"relative",flex:1}}>
@@ -173,9 +189,8 @@ function VistaMes({mesIdx,datos,onChange}){
             <button onClick={agregar} style={{width:"100%",padding:12,background:"#1c1c28",color:"#d4a843",border:"none",borderRadius:9,cursor:"pointer",fontWeight:"bold",fontSize:14}}>+ Agregar</button>
           </div>
 
-          {/* Listas */}
           {CATEGORIAS.map(c=>{
-            const lista=egresosPorCat[c].slice().sort((a,b)=>b.monto-a.monto);
+            const lista=(egresosPorCat[c] || []).slice().sort((a,b)=>b.monto-a.monto);
             if(!lista.length)return null;
             const col=CAT_COLORS[c];
             return(
@@ -228,136 +243,9 @@ function VistaResumen({meses,onExportar,xlsxReady}){
   const tAR=act.reduce((s,d)=>s+d.ahorroReal,0),tAA=act.reduce((s,d)=>s+d.gastoPorCat.Ahorro,0);
   const tN=act.reduce((s,d)=>s+d.gastoPorCat.Necesidad,0),tD=act.reduce((s,d)=>s+d.gastoPorCat.Deseo,0);
 
-  if(!act.length)return(<div style={{textAlign:"center",padding:"60px 20px",color:"#a09080"}}><div style={{fontSize:40,marginBottom:12}}>📊</div><div style={{fontSize:15}}>Aún no hay meses cargados.</div></div>);
+  if(!act.length)return(<div style={{textAlign:"center",padding:"60px 20px",color:"#a09080"}}><div style={{fontSize:40,marginBottom:12}}>📊</div><div style={{fontSize:15}}>Aún no hay meses cargados en la nube.</div></div>);
 
   return(
     <div>
       <button onClick={onExportar} disabled={!xlsxReady} style={{width:"100%",padding:13,marginBottom:16,background:xlsxReady?"#217346":"#bbb",color:"#fff",border:"none",borderRadius:11,cursor:xlsxReady?"pointer":"not-allowed",fontWeight:"bold",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontFamily:"inherit",boxShadow:xlsxReady?"0 3px 14px #21734640":"none"}}>
-        <span style={{fontSize:18}}>📥</span>{xlsxReady?`Exportar a Excel — Presupuesto_${AÑO}.xlsx`:"Preparando exportador..."}
-      </button>
-
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-        {[{label:"Total ingresado",value:tI,icon:"💵",color:"#2e8c5a"},{label:"Total gastado",value:tG,icon:"🧾",color:"#c0702f"},{label:"Ahorro real acumulado",value:tAR,icon:"🏦",color:"#1565c0"},{label:"Ahorro clasificado",value:tAA,icon:"💰",color:"#7c4dae"}].map(({label,value,icon,color})=>(
-          <div key={label} style={{background:"#fff",borderRadius:13,padding:"16px 14px",border:"1px solid #e8e0d4",boxShadow:"0 2px 8px #0000000a"}}>
-            <div style={{fontSize:20,marginBottom:6}}>{icon}</div>
-            <div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:"#a09080",marginBottom:4}}>{label}</div>
-            <div style={{fontSize:17,fontWeight:"bold",color}}>{fmt(value)}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{background:"#fff",borderRadius:14,border:"1px solid #e8e0d4",overflow:"hidden",marginBottom:16}}>
-        <div style={{background:"#1c1c28",padding:"12px 18px"}}><span style={{color:"#d4a843",fontWeight:"bold",fontSize:13,letterSpacing:1}}>DETALLE POR MES</span></div>
-        {act.map((d,i)=>{
-          const pos=d.ahorroReal>=0;
-          return(
-            <div key={i} style={{padding:"14px 18px",borderBottom:"1px solid #f5f0ea"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                <span style={{fontWeight:"bold",color:"#1c1c28",fontSize:15}}>{d.nombre}</span>
-                <span style={{fontSize:12,fontWeight:"bold",color:pos?"#2e8c5a":"#e05252",background:pos?"#edf7f2":"#fdeaea",padding:"3px 9px",borderRadius:20}}>{pos?"+":""}{fmt(d.ahorroReal)}</span>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:4,marginBottom:d.notas?10:0}}>
-                {[{label:"Ingreso",val:d.ingreso,color:"#2e8c5a"},{label:"🏠 Nec.",val:d.gastoPorCat.Necesidad,color:"#c0702f"},{label:"🎉 Des.",val:d.gastoPorCat.Deseo,color:"#7c4dae"},{label:"💰 Aho.",val:d.gastoPorCat.Ahorro,color:"#1565c0"}].map(({label,val,color})=>(
-                  <div key={label} style={{textAlign:"center"}}>
-                    <div style={{fontSize:9,color:"#a09080",textTransform:"uppercase",letterSpacing:1}}>{label}</div>
-                    <div style={{fontSize:12,fontWeight:"bold",color,marginTop:2}}>{fmt(val)}</div>
-                  </div>
-                ))}
-              </div>
-              {d.notas&&<div style={{background:"#faf7f2",borderLeft:"3px solid #d4a843",padding:"8px 12px",borderRadius:"0 6px 6px 0",fontSize:12,color:"#666",fontStyle:"italic",lineHeight:1.5}}>📝 {d.notas}</div>}
-            </div>
-          );
-        })}
-      </div>
-
-      {tG>0&&(
-        <div style={{background:"#fff",borderRadius:14,padding:"18px",border:"1px solid #e8e0d4"}}>
-          <div style={{fontSize:11,letterSpacing:2,textTransform:"uppercase",color:"#a09080",marginBottom:14}}>Distribución acumulada</div>
-          {[{label:"Necesidades",val:tN,color:"#e8a84c",ideal:"50%"},{label:"Deseos",val:tD,color:"#a97dd4",ideal:"30%"},{label:"Ahorro",val:tAA,color:"#5ab882",ideal:"20%"}].map(({label,val,color,ideal})=>{
-            const pct=(val/tG)*100;
-            return(
-              <div key={label} style={{marginBottom:12}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                  <span style={{fontSize:12,color:"#555"}}>{label} <span style={{color:"#bbb",fontSize:11}}>(ideal {ideal})</span></span>
-                  <span style={{fontSize:12,fontWeight:"bold",color}}>{fmt(val)} · {pct.toFixed(1)}%</span>
-                </div>
-                <div style={{height:8,borderRadius:4,background:"#f0ece6",overflow:"hidden"}}>
-                  <div style={{height:"100%",width:`${pct}%`,background:color,borderRadius:4,transition:"width .5s"}}/>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function App(){
-  const [vista,setVista]=useState("mes");
-  const [mesActual,setMesActual]=useState(now.getMonth());
-  const [saved,setSaved]=useState(true);
-  const xlsxReady=useSheetJS();
-
-  const [meses,setMeses]=useState(()=>{
-    try{const s=localStorage.getItem(STORAGE_KEY);return s?JSON.parse(s):{};}
-    catch{return{};}
-  });
-
-  const actualizarMes=useCallback((idx,datos)=>{
-    setSaved(false);
-    setMeses(prev=>{
-      const nuevo={...prev,[idx]:datos};
-      try{localStorage.setItem(STORAGE_KEY,JSON.stringify(nuevo));setTimeout(()=>setSaved(true),500);}
-      catch{}
-      return nuevo;
-    });
-  },[]);
-
-  const datosMes=meses[mesActual]||{ingreso:null,egresos:[],notas:""};
-  const mesesConDatos=Object.keys(meses).filter(k=>meses[k]?.ingreso).map(Number);
-
-  return(
-    <div style={{minHeight:"100vh",background:"#f7f3ee",fontFamily:"'Georgia',serif"}}>
-      <div style={{background:"#1c1c28",padding:"24px 20px 0",position:"sticky",top:0,zIndex:10,boxShadow:"0 4px 20px #00000030"}}>
-        <div style={{maxWidth:640,margin:"0 auto"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
-            <div>
-              <div style={{fontSize:10,letterSpacing:4,textTransform:"uppercase",color:"#d4a843",marginBottom:4}}>Presupuesto {AÑO}</div>
-              <h1 style={{margin:0,fontSize:22,color:"#f0e6d3",fontWeight:"normal"}}>50 · 30 · 20</h1>
-            </div>
-            <div style={{textAlign:"right"}}>
-              <div style={{fontSize:9,color:"#a09080",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Meses activos</div>
-              <div style={{fontSize:22,fontWeight:"bold",color:"#d4a843"}}>{mesesConDatos.length}</div>
-            </div>
-          </div>
-          <div style={{display:"flex",gap:2}}>
-            {[{id:"mes",label:"📅 Por mes"},{id:"resumen",label:"📊 Resumen anual"}].map(t=>(
-              <button key={t.id} onClick={()=>setVista(t.id)} style={{padding:"10px 18px",background:vista===t.id?"#f7f3ee":"transparent",color:vista===t.id?"#1c1c28":"#a09080",border:"none",borderRadius:"8px 8px 0 0",cursor:"pointer",fontWeight:vista===t.id?"bold":"normal",fontSize:13,fontFamily:"inherit"}}>{t.label}</button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div style={{maxWidth:640,margin:"0 auto",padding:"20px 16px 80px"}}>
-        {vista==="mes"?(
-          <>
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:"#a09080",marginBottom:8}}>Mes</div>
-              <div style={{display:"flex",overflowX:"auto",gap:6,paddingBottom:4}}>
-                {MESES.map((m,i)=>{
-                  const td=!!meses[i]?.ingreso,ea=i===mesActual;
-                  return(<button key={i} onClick={()=>setMesActual(i)} style={{padding:"8px 14px",borderRadius:20,border:"none",cursor:"pointer",whiteSpace:"nowrap",fontSize:12,fontWeight:ea?"bold":"normal",fontFamily:"inherit",background:ea?"#1c1c28":td?"#e8dfc8":"#ede8e1",color:ea?"#d4a843":td?"#7a5820":"#a09080",boxShadow:ea?"0 2px 8px #0000002a":"none"}}>{m.slice(0,3)}{td&&!ea?" ·":""}</button>);
-                })}
-              </div>
-            </div>
-            <VistaMes mesIdx={mesActual} datos={datosMes} onChange={d=>actualizarMes(mesActual,d)}/>
-          </>
-        ):(
-          <VistaResumen meses={meses} xlsxReady={xlsxReady} onExportar={()=>exportarExcel(meses)}/>
-        )}
-      </div>
-      <SaveBadge saved={saved}/>
-    </div>
-  );
-}
+        <span style={{fontSize:18}}>📥</span>{
